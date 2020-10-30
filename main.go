@@ -1,44 +1,80 @@
-package main 
+package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
 
 type timeStamp struct{
-	Unix int64 `json:"unix"`
-	Utc time.Time `json:"utc"`
+	Unix string`json:"unix"`
+	Natural string `json:"natural"`
 }
 
-const(
-	layout = "01-02-2006"
-)
+var dateFormats = []string{
+	"January 2 2006",
+	"Jan 2 2006",
+	"2 Jan 2006",
+	"2 January 2006",
+
+	"January 2, 2006",
+	"Jan 2, 2006",
+	"2 Jan, 2006",
+	"2 January, 2006",
+
+	"2006 January 2",
+	"2006 Jan 2",
+	"2006 2 Jan",
+	"2006 2 January",
+
+	"2006, January 2",
+	"2006, Jan 2",
+	"2006, 2 Jan",
+	"2006, 2 January",
+}
 
 func main(){
 	port := os.Getenv("PORT")
 	
-	date := "12-25-2015"
+	if port == ""{
+		port = "3000"
+	}
 
-	now, err := time.Parse(layout, date)
+	r := mux.NewRouter()
+	r.HandleFunc("/{date}", handler).Methods(http.MethodGet)
+
+	log.Fatal(http.ListenAndServe(":"+port, r))
+}
+
+func handler(w http.ResponseWriter, r *http.Request){
+	en := json.NewEncoder(w)
+	date := mux.Vars(r)["date"]
+
+	i , err := strconv.ParseInt(date, 10, 64)
+
 	if err != nil{
-		fmt.Println(err)
+		var res timeStamp
+		for _, layout := range dateFormats{
+			if getTime, err := time.Parse(layout, date); err == nil{
+				res = timeStamp{
+					Unix: strconv.FormatInt(getTime.UTC().Unix(), 10),
+					Natural: getTime.Format("January 2, 2006"),
+				}
+			}
+		}	
+		en.Encode(res)
+		return
 	}
 
-	timestamp := timeStamp{
-		Unix: now.Unix(),
-		Utc: now,
-	}
-
-	jsonUnix, _ := json.Marshal(timestamp)
-
-	http.HandleFunc("/", func (w http.ResponseWriter, r *http.Request)  {
-		w.Write(jsonUnix)
+	t := time.Unix(i, 0)
+	en.Encode(timeStamp{
+		Unix:    date,
+		Natural: t.Format("January 2, 2006"),
 	})
-
-	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
